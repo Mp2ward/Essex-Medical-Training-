@@ -11275,7 +11275,7 @@ let cloud = { session:null, profile:null, status:'', timer:null, busy:false };
 
 function cloudMe() { return cloud.session && cloud.session.user ? cloud.session.user.id : ''; }
 // Essex Medical Training licence: these accounts always get full admin rights
-const LICENCE_ADMIN_EMAILS = ['admin@essexmedicaltraining.co.uk', 'mp2ward@gmail.com'];
+const LICENCE_ADMIN_EMAILS = ['admin@essexmedicaltraining.co.uk'];
 function cloudIsLicenceAdmin() { const e = cloud.session && cloud.session.user && cloud.session.user.email; return !!e && LICENCE_ADMIN_EMAILS.includes(String(e).toLowerCase()); }
 function cloudIsReviewer() { return cloudIsLicenceAdmin() || !!(cloud.profile && (cloud.profile.role === 'iqa' || cloud.profile.role === 'admin')); }
 // Admins get a clean instructor experience in Training/Tools; full IQA/admin abilities only apply
