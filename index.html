@@ -8366,7 +8366,7 @@ function lpmOnTeam(c) {
 }
 function lpmReadOnlyNow() {
   if (typeof CLOUD_ON === 'undefined' || !CLOUD_ON) return false;
-  if (typeof cloudIsReviewer === 'function' && cloudIsReviewer()) return false;   // IQA and admin can edit anything
+  if (typeof cloudActingReviewer === 'function' && cloudActingReviewer()) return false;   // IQA, and admin while in the Admin panel, can edit anything
   if (typeof lpmLocked === 'function' && lpmLocked(lpmCourse)) {
     const v0 = document.getElementById('view-lpm');
     if (v0 && v0.classList.contains('active')) return true;
@@ -8397,7 +8397,7 @@ function lpmBackFromCourse() {
 function lpmSyncIqaJump() {
   const b = document.getElementById('lpmIqaJump');
   if (!b) return;
-  const rev = typeof cloudIsReviewer === 'function' && cloudIsReviewer();
+  const rev = typeof cloudActingReviewer === 'function' && cloudActingReviewer();
   b.style.display = (rev && lpmCourse && !lpmCourse.isExample) ? '' : 'none';
   const r = lpmCourse ? iqaFor(lpmCourse.id) : null;
   b.textContent = r ? 'IQA review · ' + r.outcome : 'IQA review';
@@ -8545,7 +8545,7 @@ function lpmOpenCourse(id) {
   if (!found) return;
   lpmCourse = found;
   lpmCurrentId = id;
-  const reviewer = typeof cloudIsReviewer === 'function' && cloudIsReviewer();
+  const reviewer = typeof cloudActingReviewer === 'function' && cloudActingReviewer();
   const locked = !reviewer && typeof lpmLocked === 'function' && lpmLocked(found);
   const ro = !reviewer && (locked || (CLOUD_ON && found.owner && found.owner !== cloudMe() && !lpmOnTeam(found)));
   document.getElementById('view-lpm').classList.toggle('lpm-ro', !!ro);
@@ -8687,7 +8687,7 @@ function lpmShowInfo(html) {
   start();
 })();
 function lpmShowStep(key) {
-  const isRev = typeof cloudIsReviewer === 'function' && cloudIsReviewer();
+  const isRev = typeof cloudActingReviewer === 'function' && cloudActingReviewer();
   const hidden = lpmHiddenSteps(lpmCourse);
   document.querySelectorAll('#lpmSteps .rn-step').forEach((t, i) => {
     if (LPM_STEPS[i] === 'iqa') { t.classList.add('lpm-iqa-tab'); t.style.display = isRev ? '' : 'none'; return; }
@@ -11160,7 +11160,7 @@ function cpdRender() {
     <p class="sc-p">A rolling record of teaching, assessment and updates, built from the courses delivered in this app. Qualsafe expects a CPD portfolio kept for at least three years and available for external quality assurance.</p>
     <div class="rn-learner-field" style="max-width:320px;"><label>Instructor</label>
       <select class="rn-name-select" onchange="cpdWho=this.value;cpdRender()">
-        ${(CLOUD_ON && cloud.profile && !cloudIsReviewer() ? [cloud.profile.full_name] : LPM_INSTRUCTOR_NAMES).map(n => `<option ${n===cpdWho?'selected':''}>${lpmEsc(n)}</option>`).join('')}
+        ${(CLOUD_ON && cloud.profile && !cloudActingReviewer() ? [cloud.profile.full_name] : LPM_INSTRUCTOR_NAMES).map(n => `<option ${n===cpdWho?'selected':''}>${lpmEsc(n)}</option>`).join('')}
       </select></div>
     <div class="cpd-cards">
       ${card(teachHours + ' hrs', 'Teaching in the last 3 years', teachHours >= 36, 'Qualsafe log of experience: 36 hours')}
@@ -11278,6 +11278,14 @@ function cloudMe() { return cloud.session && cloud.session.user ? cloud.session.
 const LICENCE_ADMIN_EMAILS = ['admin@essexmedicaltraining.co.uk', 'mp2ward@gmail.com'];
 function cloudIsLicenceAdmin() { const e = cloud.session && cloud.session.user && cloud.session.user.email; return !!e && LICENCE_ADMIN_EMAILS.includes(String(e).toLowerCase()); }
 function cloudIsReviewer() { return cloudIsLicenceAdmin() || !!(cloud.profile && (cloud.profile.role === 'iqa' || cloud.profile.role === 'admin')); }
+// Admins get a clean instructor experience in Training/Tools; full IQA/admin abilities only apply
+// while working inside the Admin panel (Course Admin / Instructor Admin). IQA-role accounts are
+// unaffected — they keep reviewer abilities everywhere, same as before.
+function cloudActingReviewer() {
+  if (!cloudIsReviewer()) return false;
+  if (cloud.profile && cloud.profile.role === 'admin') return !!window.lpmFromAdmin;
+  return true;
+}
 function cloudHash(o) { const s = JSON.stringify(o || null); let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return String(h); }
 function cloudSynced() { try { return JSON.parse(localStorage.getItem(CLOUD_SYNCED_KEY) || '{}'); } catch (e) { return {}; } }
 function cloudSetSynced(m) { try { localStorage.setItem(CLOUD_SYNCED_KEY, JSON.stringify(m)); } catch (e) {} }
@@ -12442,7 +12450,7 @@ function lpmLocked(c) {
   if (!c || c.isExample) return false;
   const r = iqaFor(c.id);
   if (!r || r.outcome !== 'Accepted') return false;
-  if (typeof cloudIsReviewer === 'function' && cloudIsReviewer()) return false;
+  if (typeof cloudActingReviewer === 'function' && cloudActingReviewer()) return false;
   const req = erLatest(c.id);
   if (req && req.status === 'approved' && (!r.updated_at || req.decided_at > r.updated_at)) return false;   // unlocked again
   return true;
@@ -12492,7 +12500,7 @@ function erPanel(courseId) {
       <div><b>${lpmEsc(r.requester_name || 'Instructor')}</b> · ${fmtShort(r.created_at)} · <span class="er-tag ${r.status}">${r.status}</span>
         <div class="er-reason">${lpmEsc(r.reason)}</div>
         ${r.decided_by ? `<div class="er-note">${lpmEsc(r.status === 'approved' ? 'Approved' : 'Declined')} by ${lpmEsc(r.decided_by)}${r.note ? ' — ' + lpmEsc(r.note) : ''}</div>` : ''}</div>
-      ${r.status === 'pending' && cloudIsReviewer() ? `<div class="er-btns">
+      ${r.status === 'pending' && cloudActingReviewer() ? `<div class="er-btns">
           <button class="rn-nav-btn primary" onclick="erDecide('${r.id}','approved')">Approve</button>
           <button class="rn-nav-btn" onclick="erDecide('${r.id}','declined')">Decline</button></div>` : ''}
     </div>`).join('');
