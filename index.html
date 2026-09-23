@@ -434,7 +434,8 @@ function fmtD(v) {
   body { background:#FFFFFF; }
   header { background:#0D1B4C !important; border-bottom:none !important; }
   header, header * { color:#FFFFFF; }
-  .brand-logo { height:30px; width:auto; display:block; }
+  .brand-logo { height:26px; width:auto; display:block; }
+  .brand-logo-badge { display:flex; align-items:center; background:#FFFFFF; border-radius:8px; padding:6px 10px; flex-shrink:0; }
   .brand-divider { width:1px; height:26px; background:rgba(255,255,255,0.28); }
   .brand-title { font-family:'Public Sans',sans-serif; font-weight:700; font-size:1.15rem;
                  letter-spacing:0.08em; color:#FFFFFF; line-height:1; white-space:nowrap;
@@ -886,7 +887,8 @@ function fmtD(v) {
     .brand-title { font-size:0.88rem; letter-spacing:0.03em; }
   }
   @media (max-width:480px) {
-    .brand-logo { height:20px; }
+    .brand-logo { height:18px; }
+    .brand-logo-badge { padding:5px 8px; border-radius:7px; }
     .brand-title { font-size:0.72rem; letter-spacing:0.01em; }
     .brand-divider { height:18px; }
     .back-hub { padding:5px 9px; font-size:0.62rem; }
@@ -1450,8 +1452,10 @@ window.addEventListener('load', function () {
 
 <header>
   <a href="#" onclick="showView('hub');return false;" style="display:flex;align-items:center;gap:12px;text-decoration:none;min-width:0;">
-    <img src="/emt-logo.png" alt="Essex Medical Training" class="brand-logo"
-         onerror="this.outerHTML='<span class=&quot;brand-title&quot; style=&quot;font-size:1.3rem&quot;>Essex Medical Training</span>'">
+    <span class="brand-logo-badge">
+      <img src="/emt-logo.png" alt="Essex Medical Training" class="brand-logo"
+           onerror="this.parentElement.outerHTML='<span class=&quot;brand-title&quot; style=&quot;font-size:1.3rem&quot;>Essex Medical Training</span>'">
+    </span>
     <div class="brand-divider"></div>
     <span class="brand-mark"><svg width="30" height="30" viewBox="0 0 64 64" aria-hidden="true"><path d="M12 6h28l14 14v38H12z" fill="#FFFFFF"/><path d="M40 6v14h14z" fill="#3FBF84"/><rect x="19" y="28" width="7" height="7" rx="1.5" fill="#0D1B4C"/><rect x="29" y="28" width="7" height="7" rx="1.5" fill="#0D1B4C"/><rect x="39" y="28" width="7" height="7" rx="1.5" fill="#3FBF84"/><rect x="19" y="38" width="7" height="7" rx="1.5" fill="#0D1B4C"/><rect x="29" y="38" width="7" height="7" rx="1.5" fill="#3FBF84"/><rect x="39" y="38" width="7" height="7" rx="1.5" fill="#0D1B4C" opacity="0.45"/><rect x="19" y="48" width="7" height="4" rx="1.5" fill="#0D1B4C" opacity="0.45"/></svg></span>
     <div style="min-width:0;">
@@ -8684,8 +8688,13 @@ function lpmShowInfo(html) {
 })();
 function lpmShowStep(key) {
   const isRev = typeof cloudIsReviewer === 'function' && cloudIsReviewer();
-  document.querySelectorAll('#lpmSteps .rn-step').forEach((t, i) => { if (LPM_STEPS[i] === 'iqa') { t.classList.add('lpm-iqa-tab'); t.style.display = isRev ? '' : 'none'; } });
+  const hidden = lpmHiddenSteps(lpmCourse);
+  document.querySelectorAll('#lpmSteps .rn-step').forEach((t, i) => {
+    if (LPM_STEPS[i] === 'iqa') { t.classList.add('lpm-iqa-tab'); t.style.display = isRev ? '' : 'none'; return; }
+    t.style.display = hidden.includes(LPM_STEPS[i]) ? 'none' : '';
+  });
   if (key === 'iqa' && !isRev) key = 'pack';
+  if (hidden.includes(key)) key = 'details';
   lpmStepIdx = LPM_STEPS.indexOf(key);
   document.querySelectorAll('#lpmSteps .rn-step').forEach((b,i) => {
     b.classList.toggle('active', LPM_STEPS[i] === key);
@@ -8693,7 +8702,7 @@ function lpmShowStep(key) {
   });
   document.querySelectorAll('.lpm-view#lpm-course .rn-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('lpmPanel-' + key).classList.add('active');
-  if (key === 'skills') { skCourseId = lpmCourse.id; skRender(); }
+  if (key === 'skills') { if (lpmCourseKind(lpmCourse) === 'ils') { ilsRender(); } else { skCourseId = lpmCourse.id; skRender(); } }
   if (key === 'theory') lpmRenderTheory();
   if (key === 'feedback') lpmRenderFeedback();
   if (key === 'overview') lpmRenderOverview();
@@ -8706,7 +8715,21 @@ function lpmShowStep(key) {
 
 // ---- Course details ----
 const LPM_COURSE_NAMES = ['FREC 3 - RPL - 3 Day', 'FREC 3 - 5 Day', 'BLS - 1 Day', 'ILS - 1 Day'];
-const LPM_LOCATIONS = ['Goodmayes Class Room 1', 'Goodmayes Rose Ward'];
+const LPM_LOCATIONS = ['Goodmayes Class Room 1', 'Goodmayes Rose Ward', 'Battlesbridge HQ'];
+// Course "family" — governs which tabs, skills grid and pack contents a course gets
+function lpmCourseKind(course) {
+  const n = ((course || lpmCourse || {}).courseName || '').trim().toUpperCase();
+  if (n.startsWith('BLS')) return 'bls';
+  if (n.startsWith('ILS')) return 'ils';
+  return 'frec';
+}
+// Steps hidden from the tab bar for this course's kind
+function lpmHiddenSteps(course) {
+  const kind = lpmCourseKind(course);
+  if (kind === 'bls') return ['skills', 'sessions', 'theory', 'overview'];
+  if (kind === 'ils') return ['sessions', 'theory'];
+  return [];
+}
 const LPM_INSTRUCTOR_NAMES = ['Dave 1', 'Dave 2', 'Miles', 'Martin'];
 // The example course uses fictional trainers; they appear only on that course, never in anyone else's list
 function lpmInstructorOptions(c) {
@@ -9731,6 +9754,63 @@ function skStatus(a, lid, d) {
   return { final: o || auto, auto, override: o || '', done, total: refs.length, refer, missing: refs.filter((r, i) => vals[i] !== 'C') };
 }
 
+// ============ ILS ASSESSMENT (simplified 5-station grid, replaces skills matrix for ILS courses) ============
+const ILS_STATIONS = [
+  ['patient', 'Patient assessment skill station'],
+  ['cpr', 'High quality CPR & AED skill station'],
+  ['airway', 'Airway Management skill station'],
+  ['oxygen', 'Oxygen & Ventilation skill station'],
+  ['team', 'Team response to cardiac arrest assessment']
+];
+const ILS_MARKS = ['', 'P', 'R', 'N/A'];
+function ilsData() {
+  if (!lpmCourse.ilsAssessment) lpmCourse.ilsAssessment = {};
+  return lpmCourse.ilsAssessment;
+}
+function ilsCell(lid, stationKey, attempt) {
+  const d = ilsData();
+  return ((d[lid] || {})[stationKey] || {})['a' + attempt] || '';
+}
+function ilsCycle(lid, stationKey, attempt) {
+  const d = ilsData();
+  if (!d[lid]) d[lid] = {};
+  if (!d[lid][stationKey]) d[lid][stationKey] = {};
+  const cur = d[lid][stationKey]['a' + attempt] || '';
+  const next = ILS_MARKS[(ILS_MARKS.indexOf(cur) + 1) % ILS_MARKS.length];
+  if (next) d[lid][stationKey]['a' + attempt] = next; else delete d[lid][stationKey]['a' + attempt];
+  lpmPersist(); ilsRender();
+}
+function ilsStationPassed(lid, stationKey) {
+  const d = ilsData();
+  const st = (d[lid] || {})[stationKey] || {};
+  return [st.a1, st.a2, st.a3].some(v => v === 'P');
+}
+function ilsOverall(lid) {
+  const attempted = ILS_STATIONS.some(([k]) => { const st = (ilsData()[lid] || {})[k] || {}; return st.a1 || st.a2 || st.a3; });
+  if (!attempted) return '';
+  return ILS_STATIONS.every(([k]) => ilsStationPassed(lid, k)) ? 'P' : 'R';
+}
+function ilsRender() {
+  const root = document.getElementById('lpmPanel-skills');
+  if (!root) return;
+  const learners = (lpmCourse.learners || []).filter(l => (l.name || '').trim());
+  let html = `<div class="sc-h2" style="margin-top:0;">Immediate Life Support — practical assessment</div>
+    <div class="sc-note">Tap a cell to cycle: blank → P (pass) → R (referred) → N/A. A learner passes a station once any attempt shows P. Feeds the course pack's practical assessment record.</div>`;
+  if (!learners.length) { root.innerHTML = html + `<p class="sc-p">Add learner names on the Learners step first.</p>`; return; }
+  learners.forEach(l => {
+    const overall = ilsOverall(l.id);
+    html += `<div class="sk-sec-title">${skEsc(l.name)}
+      ${overall ? `<span style="float:right;font-size:0.8rem;font-weight:700;color:${overall==='P'?'#0F6E56':'#C74444'};">${overall==='P'?'PASS':'REFERRAL'}</span>` : ''}</div>
+      <div class="sk-wrap"><table class="sk-table">
+        <tr><th class="sk-corner">Station</th><th>Attempt 1</th><th>Attempt 2</th><th>Attempt 3</th></tr>
+        ${ILS_STATIONS.map(([key, label]) => `<tr><td class="sk-crit">${label}</td>
+          ${[1,2,3].map(a => { const v = ilsCell(l.id, key, a); return `<td class="sk-cell"><button class="sk-tick ${v==='P'?'c':v==='R'?'r':''}" onclick="ilsCycle('${l.id}','${key}',${a})">${v||''}</button></td>`; }).join('')}
+        </tr>`).join('')}
+      </table></div>`;
+  });
+  root.innerHTML = html;
+}
+
 function skRender() {
   const root = document.getElementById('lpmPanel-skills');
   if (!root) return;
@@ -10567,13 +10647,19 @@ async function lpmBuildPack(action) {
     line('Contents', bold, 13);
     const files = await packList(lpmCourse.id);
     const counts = k => files.filter(f => f.kind === k).length;
-    ['Delegate register (' + counts('register') + ')',
-     'Qualsafe practical assessment record sheet',
-     'Applied anatomy and physiology papers (' + counts('anat') + ')',
-     'Multiple choice exam papers (' + counts('mc') + ')',
-     'Other paperwork (' + counts('other') + ')',
-     'Reasonable adjustment records (' + alnCount(lpmCourse) + ')',
-     'Learner feedback forms (' + ((lpmCourse.feedback || []).length + counts('feedback')) + ')'].forEach(t => line('• ' + t, font, 11));
+    const kind = lpmCourseKind(lpmCourse);
+    const contentLines = ['Delegate register (' + counts('register') + ')'];
+    if (kind === 'frec') {
+      contentLines.push('Qualsafe practical assessment record sheet',
+        'Applied anatomy and physiology papers (' + counts('anat') + ')',
+        'Multiple choice exam papers (' + counts('mc') + ')',
+        'Other paperwork (' + counts('other') + ')',
+        'Reasonable adjustment records (' + alnCount(lpmCourse) + ')');
+    } else if (kind === 'ils') {
+      contentLines.push('Practical assessment record (from the practical matrix)');
+    }
+    contentLines.push('Learner feedback forms (' + ((lpmCourse.feedback || []).length + counts('feedback')) + ')');
+    contentLines.forEach(t => line('• ' + t, font, 11));
 
     // 2. Delegate register photos
     const drawPhoto = async (f, label) => {
@@ -10587,9 +10673,9 @@ async function lpmBuildPack(action) {
     const reg = files.filter(f => f.kind === 'register');
     for (let i = 0; i < reg.length; i++) await drawPhoto(reg[i], 'Delegate register  ·  page ' + (i + 1) + ' of ' + reg.length);
 
-    // 3. Qualsafe practical assessment record sheet
+    // 3. Qualsafe practical assessment record sheet (FREC only)
     let recordSheetPage = -1;
-    try {
+    if (kind === 'frec') try {
       const rows = qsCollect();
       if (rows.length) {
         const rsBytes = await qsRecordSheetBytes(rows);
@@ -10600,27 +10686,70 @@ async function lpmBuildPack(action) {
       }
     } catch (e) {}
 
-    // 4. Theory papers, learner by learner: Applied A&P then multiple choice
-    const learners = (lpmCourse.learners || []).filter(l => (l.name || '').trim());
-    for (const l of learners) {
-      for (const kind of ['anat','anat_ref','mc','mc_ref','prac_ref']) {
-        const list = files.filter(f => f.kind === kind && f.learnerId === l.id).sort((a, b) => (a.page || 9) - (b.page || 9));
-        for (let i = 0; i < list.length; i++) {
-          await drawPhoto(list[i], l.name.trim() + '  ·  ' + EXAM_KINDS[kind] + '  ·  page ' + (i + 1) + ' of ' + list.length);
+    // 3b. ILS practical assessment record — one page per learner, built from the practical matrix
+    if (kind === 'ils') {
+      const ilsLearners = (lpmCourse.learners || []).filter(l => (l.name || '').trim());
+      for (const l of ilsLearners) {
+        const page = pdf.addPage(A4);
+        let py = A4[1] - 56;
+        const pline = (t, f, size, col) => { page.drawText(t, { x: 50, y: py, size, font: f, color: col || ink }); py -= size + 8; };
+        pline('IMMEDIATE LIFE SUPPORT — PRACTICAL ASSESSMENT RECORD', bold, 13);
+        pline('Staff name: ' + l.name.trim(), font, 11);
+        pline('Date: ' + fmtD(lpmCourse.startDate), font, 11);
+        pline('Venue: ' + (lpmCourse.location || ''), font, 11);
+        py -= 6;
+        const colX = [50, 300, 370, 440];
+        page.drawText('Skill station', { x: colX[0], y: py, size: 10, font: bold, color: grey });
+        page.drawText('Attempt 1', { x: colX[1], y: py, size: 10, font: bold, color: grey });
+        page.drawText('Attempt 2', { x: colX[2], y: py, size: 10, font: bold, color: grey });
+        page.drawText('Attempt 3', { x: colX[3], y: py, size: 10, font: bold, color: grey });
+        py -= 6;
+        page.drawLine({ start: { x: 50, y: py }, end: { x: 545, y: py }, thickness: 0.7, color: grey });
+        py -= 16;
+        ILS_STATIONS.forEach(([sk, label]) => {
+          page.drawText(label, { x: colX[0], y: py, size: 10, font, color: ink });
+          [1,2,3].forEach((a, ai) => { const v = ilsCell(l.id, sk, a); if (v) page.drawText(v, { x: colX[ai+1], y: py, size: 10, font, color: ink }); });
+          py -= 18;
+        });
+        py -= 10;
+        const overall = ilsOverall(l.id);
+        pline('Overall outcome: ' + (overall === 'P' ? 'Pass' : overall === 'R' ? 'Referral' : 'Not assessed'), bold, 11);
+        pline('Tutor name: ' + (lpmCourse.instructor1 || ''), font, 11);
+        if (lpmCourse.signature) {
+          try {
+            const png = await pdf.embedPng(lpmCourse.signature);
+            const maxW = 140, maxH = 30;
+            const sc = Math.min(maxW / png.width, maxH / png.height);
+            page.drawText('Signature:', { x: 50, y: py, size: 11, font, color: ink });
+            page.drawImage(png, { x: 130, y: py - 6, width: png.width * sc, height: png.height * sc });
+          } catch (e) {}
         }
       }
     }
-    // Any exam pages that were never matched to a learner
-    const orphan = files.filter(f => EXAM_KINDS[f.kind] && !learners.some(l => l.id === f.learnerId));
-    for (let i = 0; i < orphan.length; i++) await drawPhoto(orphan[i], 'Unassigned  ·  ' + EXAM_KINDS[orphan[i].kind] + '  ·  page ' + (i + 1) + ' of ' + orphan.length);
 
-    // 5. Other paperwork
-    const other = files.filter(f => f.kind === 'other');
-    for (let i = 0; i < other.length; i++) await drawPhoto(other[i], 'Other paperwork  ·  page ' + (i + 1) + ' of ' + other.length);
+    // 4. Theory papers, learner by learner: Applied A&P then multiple choice (FREC only)
+    if (kind === 'frec') {
+      const learners = (lpmCourse.learners || []).filter(l => (l.name || '').trim());
+      for (const l of learners) {
+        for (const kd of ['anat','anat_ref','mc','mc_ref','prac_ref']) {
+          const list = files.filter(f => f.kind === kd && f.learnerId === l.id).sort((a, b) => (a.page || 9) - (b.page || 9));
+          for (let i = 0; i < list.length; i++) {
+            await drawPhoto(list[i], l.name.trim() + '  ·  ' + EXAM_KINDS[kd] + '  ·  page ' + (i + 1) + ' of ' + list.length);
+          }
+        }
+      }
+      // Any exam pages that were never matched to a learner
+      const orphan = files.filter(f => EXAM_KINDS[f.kind] && !learners.some(l => l.id === f.learnerId));
+      for (let i = 0; i < orphan.length; i++) await drawPhoto(orphan[i], 'Unassigned  ·  ' + EXAM_KINDS[orphan[i].kind] + '  ·  page ' + (i + 1) + ' of ' + orphan.length);
 
-    // 6. Reasonable adjustment records
+      // 5. Other paperwork
+      const other = files.filter(f => f.kind === 'other');
+      for (let i = 0; i < other.length; i++) await drawPhoto(other[i], 'Other paperwork  ·  page ' + (i + 1) + ' of ' + other.length);
+    }
+
+    // 6. Reasonable adjustment records (FREC only)
     let alnPages = [];
-    try { alnPages = await alnPackPages(pdf, font, bold, ink, grey, A4); } catch (e) {}
+    if (kind === 'frec') try { alnPages = await alnPackPages(pdf, font, bold, ink, grey, A4); } catch (e) {}
 
     // 7. Learner feedback forms
     let feedbackPages = [];
@@ -10685,16 +10814,22 @@ async function lpmRenderPack() {
   const files = await packList(lpmCourse.id);
   const c = k => files.filter(f => f.kind === k).length;
   const named = (lpmCourse.learners || []).filter(l => (l.name || '').trim()).length;
+  const kind = lpmCourseKind(lpmCourse);
+  const rows = [`<tr><td>Cover sheet — course, instructors and ${named} learner${named===1?'':'s'}</td><td>1</td></tr>`,
+    `<tr><td>Delegate register</td><td>${c('register')}</td></tr>`];
+  if (kind === 'frec') {
+    rows.push(`<tr><td>Qualsafe practical assessment record sheet</td><td>1</td></tr>`,
+      `<tr><td>Applied anatomy and physiology papers (learner order)</td><td>${c('anat')}</td></tr>`,
+      `<tr><td>Multiple choice exam papers (learner order)</td><td>${c('mc')}</td></tr>`,
+      `<tr><td>Other paperwork</td><td>${c('other')}</td></tr>`,
+      `<tr><td>Reasonable adjustment records</td><td>${alnCount(lpmCourse)}</td></tr>`);
+  } else if (kind === 'ils') {
+    rows.push(`<tr><td>Practical assessment record (from the practical matrix)</td><td>${named}</td></tr>`);
+  }
+  rows.push(`<tr><td>Learner feedback forms</td><td>${(lpmCourse.feedback || []).length + c('feedback')}</td></tr>`);
   el.innerHTML = `<div class="sc-note">One PDF containing everything an IQA or Qualsafe needs. Tap <b>Complete course</b> to build it, check it, then <b>Submit course pack</b> to send it to the IQA team for review.</div>
     <table class="sc-table"><tr><th>Included</th><th>Pages</th></tr>
-      <tr><td>Cover sheet — course, instructors and ${named} learner${named===1?'':'s'}</td><td>1</td></tr>
-      <tr><td>Delegate register</td><td>${c('register')}</td></tr>
-      <tr><td>Qualsafe practical assessment record sheet</td><td>1</td></tr>
-      <tr><td>Applied anatomy and physiology papers (learner order)</td><td>${c('anat')}</td></tr>
-      <tr><td>Multiple choice exam papers (learner order)</td><td>${c('mc')}</td></tr>
-      <tr><td>Other paperwork</td><td>${c('other')}</td></tr>
-      <tr><td>Reasonable adjustment records</td><td>${alnCount(lpmCourse)}</td></tr>
-      <tr><td>Learner feedback forms</td><td>${(lpmCourse.feedback || []).length + c('feedback')}</td></tr>
+      ${rows.join('')}
     </table>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;" class="rn-no-print">
       ${lpmLocked(lpmCourse)
@@ -11140,7 +11275,7 @@ let cloud = { session:null, profile:null, status:'', timer:null, busy:false };
 
 function cloudMe() { return cloud.session && cloud.session.user ? cloud.session.user.id : ''; }
 // Essex Medical Training licence: these accounts always get full admin rights
-const LICENCE_ADMIN_EMAILS = ['admin@essexmedicaltraining.co.uk'];
+const LICENCE_ADMIN_EMAILS = ['admin@essexmedicaltraining.co.uk', 'mp2ward@gmail.com'];
 function cloudIsLicenceAdmin() { const e = cloud.session && cloud.session.user && cloud.session.user.email; return !!e && LICENCE_ADMIN_EMAILS.includes(String(e).toLowerCase()); }
 function cloudIsReviewer() { return cloudIsLicenceAdmin() || !!(cloud.profile && (cloud.profile.role === 'iqa' || cloud.profile.role === 'admin')); }
 function cloudHash(o) { const s = JSON.stringify(o || null); let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return String(h); }
@@ -12261,7 +12396,7 @@ async function alnPackPages(pdf, font, bold, ink, grey, A4) {
 <script>
 // ====== Built-in example course: every instructor sees the same locked template ======
 (function () {
-  const EXAMPLE = {"course": {"id": "EXAMPLE-FREC", "courseName": "FREC 3 - 5 Day", "courseRef": "EXAMPLE / EMT-FREC-014", "location": "Goodmayes Class Room 1", "startDate": "2026-10-05", "endDate": "2026-10-09", "instructor1": "John Smith", "instructor2": "Jane Smith", "extraInstructors": [], "taught": [1, 2, 3, 4, 5], "learners": [{"id": "L1", "name": "Daniel Price"}, {"id": "L2", "name": "Sophie Nolan"}, {"id": "L3", "name": "Marcus Webb"}, {"id": "L4", "name": "Alice Kerr", "aln": {"needs": ["Dyslexia"], "adjustments": ["Extra time (25%)", "Coloured overlay or paper"], "notes": "Coloured overlay used for the theory papers; extra time agreed and given.", "agreedBy": "John Smith", "date": "2026-10-05"}}], "records": [], "linkedSessionIds": [], "qa": {}, "feedback": [{"id": "FBD1", "learnerId": "", "source": "form", "savedAt": "2026-10-09T15:10:00Z", "ratings": {"venue": "Excellent", "classroom": "Excellent", "handouts": "Very Good", "equipment": "Excellent", "content": "Excellent", "knowledge": "Excellent", "interest": "Excellent", "methods": "Excellent", "support": "Excellent", "appearance": "Excellent", "confidence": "Excellent", "pace": "Excellent", "howconfident": "Extremely"}, "rateTrainer": "10", "rateCentre": "9", "leaflet": "Yes", "comments": "Best first aid course I have been on. The scenarios felt real and the feedback afterwards was clear and useful.", "name": "Daniel Price", "email": "daniel.price@example.com", "title": "", "phone": ""}], "examScores": {"L1": {"anat": {"result": "P"}, "mc": {"score": 38, "total": 40}}, "L2": {"anat": {"result": "P"}, "mc": {"score": 38, "total": 40}}, "L3": {"anat": {"result": "P"}, "mc": {"score": 38, "total": 40}}, "L4": {"anat": {"result": "P"}, "mc": {"score": 38, "total": 40}}}, "mcPassMark": 28, "paperNumbers": {"L1": "ASY8201", "L2": "ASY8202", "L3": "ASY8203", "L4": "ASY8204"}, "signature": "data:image/png;base64,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", "isExample": true}, "files": [{"kind": "register", "title": "Delegate register", "url": "register.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "other", "title": "Practical assessment record sheet", "url": "practical.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "anat", "title": "Applied anatomy and physiology", "learnerName": "Daniel Price", "learnerId": "L1", "page": 1, "paperNo": "ASX7101", "url": "anat-1.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "anat", "title": "Applied anatomy and physiology", "learnerName": "Daniel Price", "learnerId": "L1", "page": 2, "paperNo": "ASX7101", "url": "anat-2.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "mc", "title": "Multiple choice", "learnerName": "Daniel Price", "learnerId": "L1", "page": 1, "paperNo": "ASY8201", "url": "mcq-1.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "mc", "title": "Multiple choice", "learnerName": "Daniel Price", "learnerId": "L1", "page": 2, "paperNo": "ASY8201", "url": "mcq-2.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "anat", "title": "Applied anatomy and physiology", "learnerName": "Sophie Nolan", "learnerId": "L2", "page": 1, "paperNo": "ASX7102", "url": "anat-3.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "anat", "title": "Applied anatomy and physiology", "learnerName": "Sophie Nolan", "learnerId": "L2", "page": 2, "paperNo": "ASX7102", "url": "anat-4.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "mc", "title": "Multiple choice", "learnerName": "Sophie Nolan", "learnerId": "L2", "page": 1, "paperNo": "ASY8202", "url": "mcq-3.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "mc", "title": "Multiple choice", "learnerName": "Sophie Nolan", "learnerId": "L2", "page": 2, "paperNo": "ASY8202", "url": "mcq-4.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "anat", "title": "Applied anatomy and physiology", "learnerName": "Marcus Webb", "learnerId": "L3", "page": 1, "paperNo": "ASX7103", "url": "anat-5.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "anat", "title": "Applied anatomy and physiology", "learnerName": "Marcus Webb", "learnerId": "L3", "page": 2, "paperNo": "ASX7103", "url": "anat-6.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "mc", "title": "Multiple choice", "learnerName": "Marcus Webb", "learnerId": "L3", "page": 1, "paperNo": "ASY8203", "url": "mcq-5.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "mc", "title": "Multiple choice", "learnerName": "Marcus Webb", "learnerId": "L3", "page": 2, "paperNo": "ASY8203", "url": "mcq-6.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "anat", "title": "Applied anatomy and physiology", "learnerName": "Alice Kerr", "learnerId": "L4", "page": 1, "paperNo": "ASX7104", "url": "anat-7.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "anat", "title": "Applied anatomy and physiology", "learnerName": "Alice Kerr", "learnerId": "L4", "page": 2, "paperNo": "ASX7104", "url": "anat-8.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "mc", "title": "Multiple choice", "learnerName": "Alice Kerr", "learnerId": "L4", "page": 1, "paperNo": "ASY8204", "url": "mcq-7.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "mc", "title": "Multiple choice", "learnerName": "Alice Kerr", "learnerId": "L4", "page": 2, "paperNo": "ASY8204", "url": "mcq-8.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "feedback", "title": "Learner feedback form", "url": "fb-1.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "feedback", "title": "Learner feedback form", "url": "fb-2.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "feedback", "title": "Learner feedback form", "url": "fb-3.jpg", "courseId": "EXAMPLE-FREC"}]};
+  const EXAMPLE = {"course": {"id": "EXAMPLE-FREC", "courseName": "FREC 3 - 5 Day", "courseRef": "EXAMPLE / EMT-FREC-014", "location": "Battlesbridge HQ", "startDate": "2026-10-05", "endDate": "2026-10-09", "instructor1": "John Smith", "instructor2": "Jane Smith", "extraInstructors": [], "taught": [1, 2, 3, 4, 5], "learners": [{"id": "L1", "name": "Daniel Price"}, {"id": "L2", "name": "Sophie Nolan"}, {"id": "L3", "name": "Marcus Webb"}, {"id": "L4", "name": "Alice Kerr", "aln": {"needs": ["Dyslexia"], "adjustments": ["Extra time (25%)", "Coloured overlay or paper"], "notes": "Coloured overlay used for the theory papers; extra time agreed and given.", "agreedBy": "John Smith", "date": "2026-10-05"}}], "records": [], "linkedSessionIds": [], "qa": {}, "feedback": [{"id": "FBD1", "learnerId": "", "source": "form", "savedAt": "2026-10-09T15:10:00Z", "ratings": {"venue": "Excellent", "classroom": "Excellent", "handouts": "Very Good", "equipment": "Excellent", "content": "Excellent", "knowledge": "Excellent", "interest": "Excellent", "methods": "Excellent", "support": "Excellent", "appearance": "Excellent", "confidence": "Excellent", "pace": "Excellent", "howconfident": "Extremely"}, "rateTrainer": "10", "rateCentre": "9", "leaflet": "Yes", "comments": "Best first aid course I have been on. The scenarios felt real and the feedback afterwards was clear and useful.", "name": "Daniel Price", "email": "daniel.price@example.com", "title": "", "phone": ""}], "examScores": {"L1": {"anat": {"result": "P"}, "mc": {"score": 38, "total": 40}}, "L2": {"anat": {"result": "P"}, "mc": {"score": 38, "total": 40}}, "L3": {"anat": {"result": "P"}, "mc": {"score": 38, "total": 40}}, "L4": {"anat": {"result": "P"}, "mc": {"score": 38, "total": 40}}}, "mcPassMark": 28, "paperNumbers": {"L1": "ASY8201", "L2": "ASY8202", "L3": "ASY8203", "L4": "ASY8204"}, "signature": "data:image/png;base64,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", "isExample": true}, "files": [{"kind": "register", "title": "Delegate register", "url": "register.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "other", "title": "Practical assessment record sheet", "url": "practical.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "anat", "title": "Applied anatomy and physiology", "learnerName": "Daniel Price", "learnerId": "L1", "page": 1, "paperNo": "ASX7101", "url": "anat-1.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "anat", "title": "Applied anatomy and physiology", "learnerName": "Daniel Price", "learnerId": "L1", "page": 2, "paperNo": "ASX7101", "url": "anat-2.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "mc", "title": "Multiple choice", "learnerName": "Daniel Price", "learnerId": "L1", "page": 1, "paperNo": "ASY8201", "url": "mcq-1.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "mc", "title": "Multiple choice", "learnerName": "Daniel Price", "learnerId": "L1", "page": 2, "paperNo": "ASY8201", "url": "mcq-2.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "anat", "title": "Applied anatomy and physiology", "learnerName": "Sophie Nolan", "learnerId": "L2", "page": 1, "paperNo": "ASX7102", "url": "anat-3.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "anat", "title": "Applied anatomy and physiology", "learnerName": "Sophie Nolan", "learnerId": "L2", "page": 2, "paperNo": "ASX7102", "url": "anat-4.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "mc", "title": "Multiple choice", "learnerName": "Sophie Nolan", "learnerId": "L2", "page": 1, "paperNo": "ASY8202", "url": "mcq-3.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "mc", "title": "Multiple choice", "learnerName": "Sophie Nolan", "learnerId": "L2", "page": 2, "paperNo": "ASY8202", "url": "mcq-4.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "anat", "title": "Applied anatomy and physiology", "learnerName": "Marcus Webb", "learnerId": "L3", "page": 1, "paperNo": "ASX7103", "url": "anat-5.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "anat", "title": "Applied anatomy and physiology", "learnerName": "Marcus Webb", "learnerId": "L3", "page": 2, "paperNo": "ASX7103", "url": "anat-6.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "mc", "title": "Multiple choice", "learnerName": "Marcus Webb", "learnerId": "L3", "page": 1, "paperNo": "ASY8203", "url": "mcq-5.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "mc", "title": "Multiple choice", "learnerName": "Marcus Webb", "learnerId": "L3", "page": 2, "paperNo": "ASY8203", "url": "mcq-6.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "anat", "title": "Applied anatomy and physiology", "learnerName": "Alice Kerr", "learnerId": "L4", "page": 1, "paperNo": "ASX7104", "url": "anat-7.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "anat", "title": "Applied anatomy and physiology", "learnerName": "Alice Kerr", "learnerId": "L4", "page": 2, "paperNo": "ASX7104", "url": "anat-8.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "mc", "title": "Multiple choice", "learnerName": "Alice Kerr", "learnerId": "L4", "page": 1, "paperNo": "ASY8204", "url": "mcq-7.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "mc", "title": "Multiple choice", "learnerName": "Alice Kerr", "learnerId": "L4", "page": 2, "paperNo": "ASY8204", "url": "mcq-8.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "feedback", "title": "Learner feedback form", "url": "fb-1.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "feedback", "title": "Learner feedback form", "url": "fb-2.jpg", "courseId": "EXAMPLE-FREC"}, {"kind": "feedback", "title": "Learner feedback form", "url": "fb-3.jpg", "courseId": "EXAMPLE-FREC"}]};
   const KEY = 'dtc_example_v1';
   function put(db, rec) { return new Promise((ok, no) => { const t = db.transaction('files','readwrite'); t.objectStore('files').put(rec); t.oncomplete = ok; t.onerror = no; }); }
   async function plant() {
@@ -12465,14 +12600,15 @@ function qzTimeOpts() {
   return `<div class="qz-time" id="qzTimeOpts"><div class="qz-time-h">Question time</div><div class="qz-seg">${Object.keys(QZ_TIMES).map(k =>
     `<button class="${k === qzTimeMode ? 'on' : ''}" onclick="qzSetTime('${k}')"><b>${QZ_TIMES[k].label}</b><span>${QZ_TIMES[k].sub}</span></button>`).join('')}</div></div>`;
 }
-// Sound files — upload these to the top level of the repo. Any missing file is simply skipped.
+// Sound files — hosted centrally at s3g.digitaltrainingcentre.app, shared across every customer's build.
+const QZ_SOUND_BASE = 'https://s3g.digitaltrainingcentre.app/';
 const QZ_SOUNDS = {
-  lobby:    'quiz-lobby.mp3',     // looping music in the lobby and between questions
-  question: 'quiz-question.mp3',  // looping, more intense music while a question is open
-  join:     'quiz-join.mp3',      // pop when a learner joins
-  tick:     'quiz-tick.mp3',      // each of the last 5 seconds
-  reveal:   'quiz-reveal.mp3',    // answer revealed
-  winner:   'quiz-winner.mp3'     // podium fanfare
+  lobby:    QZ_SOUND_BASE + 'quiz-lobby.mp3',     // looping music in the lobby and between questions
+  question: QZ_SOUND_BASE + 'quiz-question.mp3',  // looping, more intense music while a question is open
+  join:     QZ_SOUND_BASE + 'quiz-join.mp3',      // pop when a learner joins
+  tick:     QZ_SOUND_BASE + 'quiz-tick.mp3',      // each of the last 5 seconds
+  reveal:   QZ_SOUND_BASE + 'quiz-reveal.mp3',    // answer revealed
+  winner:   QZ_SOUND_BASE + 'quiz-winner.mp3'     // podium fanfare
 };
 let qz = { mode:'', quiz:null, qs:[], i:-1, phase:'pick', code:'', live:false, answers:[], players:{}, scores:{}, streak:{}, last:{}, timer:null, poll:null, t0:0, shown:{} };
 
