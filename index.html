@@ -10680,35 +10680,51 @@ async function lpmBuildPack(action) {
     const reg = files.filter(f => f.kind === 'register');
     for (let i = 0; i < reg.length; i++) await drawPhoto(reg[i], 'Delegate register  ·  page ' + (i + 1) + ' of ' + reg.length);
 
-    // 2b. Live register — one page listing everyone who signed in by QR, with their signature
+    // 2b. Live register — recreated in the same layout as the seminar sign-in sheet
+    //     (Seminar / session details header, then Course Name | Name | Position | Organisation | Signature)
     const rgEntries = lpmCourse.registerEntries || [];
     if (rgEntries.length) {
-      const rowH = 30, perPage = 20;
+      const rowH = 46, perPage = 9;
+      const sessionStart = fmtD(lpmCourse.startDate) + (lpmCourse.startTime ? ', ' + lpmCourse.startTime : '');
+      const sessionEnd = fmtD(lpmCourse.endDate || lpmCourse.startDate) + (lpmCourse.endTime ? ', ' + lpmCourse.endTime : '');
       for (let start = 0; start < rgEntries.length; start += perPage) {
         const chunk = rgEntries.slice(start, start + perPage);
         const page = pdf.addPage(A4);
-        page.drawText('Delegate register — signed on phone' + (rgEntries.length > perPage ? '  ·  page ' + (start / perPage + 1) + ' of ' + Math.ceil(rgEntries.length / perPage) : ''), { x: 34, y: A4[1] - 34, size: 10, font: bold, color: ink });
-        let ry = A4[1] - 66;
-        page.drawText('Name', { x: 34, y: ry, size: 9, font: bold, color: grey });
-        page.drawText('Position', { x: 210, y: ry, size: 9, font: bold, color: grey });
-        page.drawText('Organisation', { x: 340, y: ry, size: 9, font: bold, color: grey });
-        page.drawText('Signature', { x: 470, y: ry, size: 9, font: bold, color: grey });
-        ry -= 6;
-        page.drawLine({ start: { x: 34, y: ry }, end: { x: 561, y: ry }, thickness: 0.6, color: grey });
-        ry -= 20;
+        let hy = A4[1] - 40;
+        page.drawText('Seminar Sign-in Sheet', { x: 34, y: hy, size: 15, font: bold, color: ink }); hy -= 20;
+        page.drawText('Seminar ' + (lpmCourse.courseName || ''), { x: 34, y: hy, size: 10, font, color: ink }); hy -= 16;
+        page.drawText('Session start ' + sessionStart, { x: 34, y: hy, size: 9, font, color: grey }); hy -= 13;
+        page.drawText('Session end ' + sessionEnd, { x: 34, y: hy, size: 9, font, color: grey }); hy -= 13;
+        page.drawText('Room ' + (lpmCourse.location || ''), { x: 34, y: hy, size: 9, font, color: grey }); hy -= 13;
+        page.drawText('Number of attendees ' + rgEntries.length + (rgEntries.length > perPage ? '  ·  page ' + (start / perPage + 1) + ' of ' + Math.ceil(rgEntries.length / perPage) : ''), { x: 34, y: hy, size: 9, font, color: grey }); hy -= 18;
+        const colX = { course: 34, name: 180, position: 300, org: 400, sig: 490 };
+        page.drawText('Course Name', { x: colX.course, y: hy, size: 8.5, font: bold, color: grey });
+        page.drawText('Name', { x: colX.name, y: hy, size: 8.5, font: bold, color: grey });
+        page.drawText("User's Position", { x: colX.position, y: hy, size: 8.5, font: bold, color: grey });
+        page.drawText("User's Organisation", { x: colX.org, y: hy, size: 8.5, font: bold, color: grey });
+        page.drawText('Signature', { x: colX.sig, y: hy, size: 8.5, font: bold, color: grey });
+        hy -= 6;
+        page.drawLine({ start: { x: 34, y: hy }, end: { x: 561, y: hy }, thickness: 0.6, color: grey });
+        hy -= rowH * 0.55;
+        const wrap = (t, max) => { t = t || ''; const out = []; while (t.length > max) { out.push(t.slice(0, max)); t = t.slice(max); } out.push(t); return out.slice(0, 3); };
         for (const entry of chunk) {
-          page.drawText((entry.name || '').slice(0, 30), { x: 34, y: ry + 8, size: 9.5, font, color: ink });
-          page.drawText((entry.position || '').slice(0, 24), { x: 210, y: ry + 8, size: 8.5, font, color: ink });
-          page.drawText((entry.organisation || '').slice(0, 24), { x: 340, y: ry + 8, size: 8.5, font, color: ink });
+          const courseLines = wrap(lpmCourse.courseName || '', 20);
+          courseLines.forEach((l, i) => page.drawText(l, { x: colX.course, y: hy + (courseLines.length - 1 - i) * 10, size: 8, font, color: ink }));
+          page.drawText((entry.name || '').slice(0, 22), { x: colX.name, y: hy, size: 9, font, color: ink });
+          const posLines = wrap(entry.position || '', 16);
+          posLines.forEach((l, i) => page.drawText(l, { x: colX.position, y: hy + (posLines.length - 1 - i) * 10, size: 8, font, color: ink }));
+          const orgLines = wrap(entry.organisation || '', 14);
+          orgLines.forEach((l, i) => page.drawText(l, { x: colX.org, y: hy + (orgLines.length - 1 - i) * 10, size: 8, font, color: ink }));
           if (entry.signature) {
             try {
               const png = await pdf.embedPng(entry.signature);
-              const maxW = 90, maxH = 22;
+              const maxW = 68, maxH = 24;
               const sc = Math.min(maxW / png.width, maxH / png.height);
-              page.drawImage(png, { x: 470, y: ry, width: png.width * sc, height: png.height * sc });
+              page.drawImage(png, { x: colX.sig, y: hy - 4, width: png.width * sc, height: png.height * sc });
             } catch (e) {}
           }
-          ry -= rowH;
+          hy -= rowH;
+          page.drawLine({ start: { x: 34, y: hy + rowH * 0.45 }, end: { x: 561, y: hy + rowH * 0.45 }, thickness: 0.3, color: grey });
         }
       }
     }

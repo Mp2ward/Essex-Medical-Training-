@@ -19,7 +19,7 @@ h1{font-size:1.3rem;text-align:center;margin:0 0 4px;}
 .field label{display:block;font-size:0.85rem;margin-bottom:6px;color:#4B5476;}
 .field label .req{color:var(--bad);}
 .optional{color:#8A93B0;font-weight:400;}
-input[type=text]{width:100%;padding:10px 12px;border-radius:9px;border:1px solid var(--line);font-size:0.95rem;font-family:inherit;background:#fff;color:var(--navy);}
+input[type=text],select{width:100%;padding:10px 12px;border-radius:9px;border:1px solid var(--line);font-size:0.95rem;font-family:inherit;background:#fff;color:var(--navy);}
 .sig-wrap{border:1px solid var(--line);border-radius:9px;background:#fff;overflow:hidden;touch-action:none;}
 canvas{display:block;width:100%;height:160px;touch-action:none;}
 .sig-actions{display:flex;justify-content:flex-end;margin-top:6px;}
@@ -63,6 +63,11 @@ async function rpc(name, body){
 }
 
 let canvas, ctx, drawing = false, hasDrawn = false;
+window.onPositionChange = function(v){
+  const box = document.getElementById('regPosition');
+  if (v === '__other__') { box.style.display = 'block'; box.value = ''; box.focus(); }
+  else { box.style.display = 'none'; box.value = v; }
+};
 function sigPos(e, rect){
   const t = e.touches && e.touches[0];
   return { x: (t ? t.clientX : e.clientX) - rect.left, y: (t ? t.clientY : e.clientY) - rect.top };
@@ -103,8 +108,17 @@ function render(info){
 
     <div class="section">
       <div class="field"><label>Full name <span class="req">*</span></label><input type="text" id="regName"></div>
-      <div class="field"><label>Position <span class="optional">(optional)</span></label><input type="text" id="regPosition"></div>
-      <div class="field"><label>Organisation <span class="optional">(optional)</span></label><input type="text" id="regOrg"></div>
+      <div class="field"><label>Position <span class="optional">(optional)</span></label>
+        <select id="regPositionSelect" onchange="onPositionChange(this.value)">
+          <option value="">Select…</option>
+          <option value="Nurse">Nurse</option>
+          <option value="Doctor">Doctor</option>
+          <option value="Health Care Assistant">Health Care Assistant</option>
+          <option value="__other__">Other (type your own)</option>
+        </select>
+        <input type="text" id="regPosition" placeholder="Type your position" style="display:none;margin-top:8px;">
+      </div>
+      <div class="field"><label>Organisation <span class="optional">(optional)</span></label><input type="text" id="regOrg" value="NELFT"></div>
       <div class="field">
         <label>Signature <span class="req">*</span></label>
         <div class="sig-wrap"><canvas id="sigCanvas"></canvas></div>
