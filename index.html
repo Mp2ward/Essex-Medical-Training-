@@ -9021,6 +9021,8 @@ function lpmRenderLearners() {
   const c = lpmCourse;
   let html = `<div class="sc-h2" style="margin-top:0;">Learners on this course</div>
     <div class="sc-note">Add every learner once here. They'll appear automatically in the competency record. Use <b>+ Learning needs</b> to record anything disclosed and the adjustments agreed.</div>
+    <div class="fb-qr-card" id="rgQrCard"></div>
+    <div id="rgSyncWrap" class="rn-no-print"></div>
     <input type="file" id="lpmScanInput" accept="image/*" style="display:none;" onchange="lpmHandleScan(this)">
     <input type="file" id="lpmExamInput" accept="image/*" multiple style="display:none;" onchange="lpmExamCapture(this)">
     <button class="rn-nav-btn rn-no-print" style="margin-bottom:18px;" onclick="document.getElementById('lpmScanInput').click()">📷 Scan register (photo or screenshot)</button>
@@ -9042,6 +9044,10 @@ function lpmRenderLearners() {
   html += `<button class="lpm-add-learner" onclick="lpmAddLearner()">+ Add learner</button>`;
   document.getElementById('lpmPanel-learners').innerHTML = html;
   lpmRenderRegisterPhotos();
+  rgRenderQrCard();
+  const syncWrap = document.getElementById('rgSyncWrap');
+  if (syncWrap) syncWrap.innerHTML = rgList().length
+    ? `<button class="rn-nav-btn" style="margin:-8px 0 18px;" onclick="rgAddAllToLearners()">Add signed-in names to learner list (${rgList().length})</button>` : '';
 }
 
 function lpmAddLearner() {
@@ -10648,7 +10654,8 @@ async function lpmBuildPack(action) {
     const files = await packList(lpmCourse.id);
     const counts = k => files.filter(f => f.kind === k).length;
     const kind = lpmCourseKind(lpmCourse);
-    const contentLines = ['Delegate register (' + counts('register') + ')'];
+    const rgCount = (lpmCourse.registerEntries || []).length;
+    const contentLines = ['Delegate register (' + counts('register') + (rgCount ? ' photographed + ' + rgCount + ' signed on phone' : '') + ')'];
     if (kind === 'frec') {
       contentLines.push('Qualsafe practical assessment record sheet',
         'Applied anatomy and physiology papers (' + counts('anat') + ')',
@@ -10672,6 +10679,39 @@ async function lpmBuildPack(action) {
     };
     const reg = files.filter(f => f.kind === 'register');
     for (let i = 0; i < reg.length; i++) await drawPhoto(reg[i], 'Delegate register  ·  page ' + (i + 1) + ' of ' + reg.length);
+
+    // 2b. Live register — one page listing everyone who signed in by QR, with their signature
+    const rgEntries = lpmCourse.registerEntries || [];
+    if (rgEntries.length) {
+      const rowH = 30, perPage = 20;
+      for (let start = 0; start < rgEntries.length; start += perPage) {
+        const chunk = rgEntries.slice(start, start + perPage);
+        const page = pdf.addPage(A4);
+        page.drawText('Delegate register — signed on phone' + (rgEntries.length > perPage ? '  ·  page ' + (start / perPage + 1) + ' of ' + Math.ceil(rgEntries.length / perPage) : ''), { x: 34, y: A4[1] - 34, size: 10, font: bold, color: ink });
+        let ry = A4[1] - 66;
+        page.drawText('Name', { x: 34, y: ry, size: 9, font: bold, color: grey });
+        page.drawText('Position', { x: 210, y: ry, size: 9, font: bold, color: grey });
+        page.drawText('Organisation', { x: 340, y: ry, size: 9, font: bold, color: grey });
+        page.drawText('Signature', { x: 470, y: ry, size: 9, font: bold, color: grey });
+        ry -= 6;
+        page.drawLine({ start: { x: 34, y: ry }, end: { x: 561, y: ry }, thickness: 0.6, color: grey });
+        ry -= 20;
+        for (const entry of chunk) {
+          page.drawText((entry.name || '').slice(0, 30), { x: 34, y: ry + 8, size: 9.5, font, color: ink });
+          page.drawText((entry.position || '').slice(0, 24), { x: 210, y: ry + 8, size: 8.5, font, color: ink });
+          page.drawText((entry.organisation || '').slice(0, 24), { x: 340, y: ry + 8, size: 8.5, font, color: ink });
+          if (entry.signature) {
+            try {
+              const png = await pdf.embedPng(entry.signature);
+              const maxW = 90, maxH = 22;
+              const sc = Math.min(maxW / png.width, maxH / png.height);
+              page.drawImage(png, { x: 470, y: ry, width: png.width * sc, height: png.height * sc });
+            } catch (e) {}
+          }
+          ry -= rowH;
+        }
+      }
+    }
 
     // 3. Qualsafe practical assessment record sheet (FREC only)
     let recordSheetPage = -1;
@@ -10816,7 +10856,7 @@ async function lpmRenderPack() {
   const named = (lpmCourse.learners || []).filter(l => (l.name || '').trim()).length;
   const kind = lpmCourseKind(lpmCourse);
   const rows = [`<tr><td>Cover sheet — course, instructors and ${named} learner${named===1?'':'s'}</td><td>1</td></tr>`,
-    `<tr><td>Delegate register</td><td>${c('register')}</td></tr>`];
+    `<tr><td>Delegate register (photographed + ${(lpmCourse.registerEntries||[]).length} signed on phone)</td><td>${c('register') + ((lpmCourse.registerEntries||[]).length ? 1 : 0)}</td></tr>`];
   if (kind === 'frec') {
     rows.push(`<tr><td>Qualsafe practical assessment record sheet</td><td>1</td></tr>`,
       `<tr><td>Applied anatomy and physiology papers (learner order)</td><td>${c('anat')}</td></tr>`,
@@ -12302,6 +12342,144 @@ function fbStartPolling() {
     const n = await fbPullResponses();
     if (n) { if (full) fbUpdateCounts(); else lpmRenderFeedback(); }
   }, 10000);
+}
+
+// =====================================================================
+// LIVE DELEGATE REGISTER BY QR CODE (mock model — reuses feedback's QR + polling pattern)
+// Instructors project the QR on a board/screen; learners sign in on their own phone
+// (name, position, organisation, signature). Entries feed the course pack automatically.
+// =====================================================================
+const RG_EXAMPLE_URL = 'https://sector3.digitaltrainingcentre.app/register.html?t=example-not-live';
+let rgPollTimer = null;
+function rgList() { return lpmCourse.registerEntries || (lpmCourse.registerEntries = []); }
+function rgLinkUrl(token) {
+  const base = location.origin + location.pathname.replace(/[^/]*$/, '');
+  return base + 'register.html?t=' + token;
+}
+function rgCanQr() { return CLOUD_ON && cloud.session && lpmCourse && !lpmCourse.isExample && (!lpmCourse.owner || lpmCourse.owner === cloudMe()); }
+
+async function rgEnsureLink() {
+  const l = lpmCourse.registerLink;
+  if (l && l.token && new Date(l.expires) > new Date(Date.now() + 3600e3)) return l;
+  const ch = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const token = Array.from(crypto.getRandomValues(new Uint8Array(22))).map(b => ch[b % ch.length]).join('');
+  await cloudPush(); // the course must exist on the server before a link can point to it
+  try {
+    const rows = await cloudRest('courses?select=id&id=eq.' + encodeURIComponent(lpmCourse.id));
+    if (!rows || !rows.length) throw new Error('This course hasn\'t synced to the server yet. Check the sync indicator by your name, then try again.');
+  } catch (e) { if (/hasn\'t synced/.test(e.message)) throw e; }
+  const expires = new Date(Date.now() + 14 * 864e5).toISOString();
+  await cloudRest('register_links', 'POST', [{ token, course_id: lpmCourse.id, owner: cloudMe(), expires_at: expires }], 'return=minimal');
+  lpmCourse.registerLink = { token, expires };
+  lpmPersist();
+  return lpmCourse.registerLink;
+}
+
+async function rgRenderQrCard() {
+  const box = document.getElementById('rgQrCard');
+  if (!box) return;
+  if (lpmCourse && lpmCourse.isExample) {
+    box.innerHTML = `<button class="fb-enlarge" title="Show full screen" aria-label="Show full screen" onclick="rgFullScreen()">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button>
+      <div class="fb-qr-title">Scan to sign the register</div>
+      <div id="rgQrImg" class="fb-qr-img"></div>
+      <div class="fb-qr-sub"><b>Example only</b> — this code isn't live. On your own courses the code opens the register and sign-ins appear here automatically.</div>`;
+    fbDrawQr(document.getElementById('rgQrImg'), RG_EXAMPLE_URL, 190);
+    return;
+  }
+  if (!CLOUD_ON || !cloud.session) { box.innerHTML = `<div class="fb-qr-title">Scan to sign the register</div><p class="sc-p">Sign in to show the register QR code.</p>`; return; }
+  if (!rgCanQr()) { box.innerHTML = `<div class="fb-qr-title">Live register by QR</div><p class="sc-p">Only the course's instructor can show the QR code. Sign-ins appear here automatically.</p>`; return; }
+  if (!navigator.onLine) { box.innerHTML = `<div class="fb-qr-title">Scan to sign the register</div><p class="sc-p">Connect to the internet to show the QR code.</p>`; return; }
+  box.innerHTML = `<div class="fb-qr-title">Scan to sign the register</div><div class="fb-qr-wait">Preparing QR code…</div>`;
+  try {
+    const link = await rgEnsureLink();
+    const url = rgLinkUrl(link.token);
+    box.innerHTML = `<button class="fb-enlarge" title="Show full screen" aria-label="Show full screen" onclick="rgFullScreen()">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button>
+      <div class="fb-qr-title">Scan to sign the register</div>
+      <div id="rgQrImg" class="fb-qr-img"></div>
+      <div class="fb-qr-sub">${rgList().length} signed in so far — display full screen for the room</div>`;
+    await fbDrawQr(document.getElementById('rgQrImg'), url, 190);
+  } catch (e) {
+    const raw = String(e.message || e);
+    const friendly = /row-level security|42501/.test(raw)
+      ? 'The register tables haven\'t been set up on the server yet, or this course hasn\'t finished syncing. Run supabase_register.sql, check the sync indicator is green, then try again.'
+      : /relation .* does not exist|PGRST20|42P01/.test(raw) ? 'The register tables are missing on the server. Run supabase_register.sql in Supabase, then try again.'
+      : raw;
+    box.innerHTML = `<div class="fb-qr-title">Scan to sign the register</div><p class="sc-p" style="color:#C74444;">${lpmEsc(friendly)}</p><button class="rn-nav-btn" onclick="rgRenderQrCard()">Try again</button>`;
+  }
+  if (!rgRenderQrCard._pulling) { rgRenderQrCard._pulling = true; rgPullResponses().then(n => { rgRenderQrCard._pulling = false; if (n) rgRenderQrCard(); }); }
+  rgStartPolling();
+}
+
+async function rgFullScreen() {
+  const link = lpmCourse.registerLink;
+  const example = !!(lpmCourse && lpmCourse.isExample);
+  if (!link && !example) return;
+  const ov = document.createElement('div');
+  ov.id = 'rgFull'; ov.className = 'fb-full';
+  ov.innerHTML = `<button class="fb-full-close" onclick="rgCloseFull()" aria-label="Close">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button>
+    <div class="fb-full-title">Scan to sign the register</div>
+    <div class="fb-full-course">${lpmEsc(lpmCourse.courseName || '')} · ${fmtD(lpmCourse.startDate)}${example ? ' · example only, not live' : ''}</div>
+    <div id="rgFullImg" class="fb-full-img"></div>
+    <div class="fb-full-count" id="rgFullCount"></div>`;
+  document.body.appendChild(ov);
+  const size = Math.floor(Math.min(window.innerWidth, window.innerHeight - 190) * 0.86);
+  await fbDrawQr(document.getElementById('rgFullImg'), example ? RG_EXAMPLE_URL : rgLinkUrl(link.token), Math.max(220, size));
+  rgUpdateCounts();
+  try { if (ov.requestFullscreen) ov.requestFullscreen().catch(() => {}); } catch (e) {}
+}
+function rgCloseFull() {
+  const ov = document.getElementById('rgFull');
+  if (ov) ov.remove();
+  try { if (document.fullscreenElement) document.exitFullscreen(); } catch (e) {}
+  lpmRenderLearners();
+}
+function rgUpdateCounts() {
+  const el = document.getElementById('rgFullCount');
+  if (el) el.textContent = rgList().length + ' signed in so far';
+}
+
+// Bring phone sign-ins into the course, so they appear in the counter and the course pack
+async function rgPullResponses() {
+  if (!CLOUD_ON || !cloud.session || !navigator.onLine || !lpmCourse) return 0;
+  try {
+    const rows = await cloudRest('register_responses?select=id,name,position,organisation,signature,created_at&course_id=eq.' + encodeURIComponent(lpmCourse.id) + '&order=created_at') || [];
+    const have = new Set(rgList().map(r => r.id));
+    let added = 0;
+    rows.forEach(r => {
+      const id = 'QR-' + r.id;
+      if (have.has(id)) return;
+      rgList().push({ id, name: r.name || '', position: r.position || '', organisation: r.organisation || '', signature: r.signature || '', signedAt: r.created_at });
+      added++;
+    });
+    if (added && (!lpmCourse.owner || lpmCourse.owner === cloudMe())) lpmPersist();
+    return added;
+  } catch (e) { return 0; }
+}
+function rgStartPolling() {
+  clearInterval(rgPollTimer);
+  rgPollTimer = setInterval(async () => {
+    const onTab = document.getElementById('lpmPanel-learners') && document.getElementById('lpmPanel-learners').classList.contains('active');
+    const full = !!document.getElementById('rgFull');
+    if (!onTab && !full) { clearInterval(rgPollTimer); return; }
+    const n = await rgPullResponses();
+    if (n) { if (full) rgUpdateCounts(); else rgRenderQrCard(); }
+  }, 10000);
+}
+// Turn signed-in entries into named learners on the course, one click
+function rgAddAllToLearners() {
+  const existing = new Set((lpmCourse.learners || []).map(l => (l.name || '').trim().toLowerCase()));
+  let added = 0;
+  rgList().forEach(r => {
+    const key = (r.name || '').trim().toLowerCase();
+    if (!key || existing.has(key)) return;
+    lpmCourse.learners.push({ id: 'L' + Date.now() + Math.random().toString(36).slice(2, 6), name: r.name.trim() });
+    existing.add(key);
+    added++;
+  });
+  if (added) { lpmPersist(); lpmRenderLearners(); }
 }
 
 // ============ ADDITIONAL LEARNING NEEDS AND REASONABLE ADJUSTMENTS ============
